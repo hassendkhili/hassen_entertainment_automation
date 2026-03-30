@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:audioplayers/audioplayers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:lottie/lottie.dart';
 import 'dart:async';
 import 'dart:convert';
 
 import '../models/activity_model.dart';
+import '../services/audio_service.dart'; // ⬅️ استدعاء الخدمة التي برمجناها
 
 class GoldGradientText extends StatelessWidget {
   final String text;
@@ -46,16 +46,20 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   String _currentTime = "";
   List<ActivitySchedule> _schedules = [];
-  final AudioPlayer _audioPlayer = AudioPlayer();
+  
+  // ⬅️ الاعتماد على الخدمة (Service) عوضاً عن المشغل المباشر
+  final AudioService _audioService = AudioService();
 
   int? _playingIndex;
+  Timer? _timer;
 
   @override
   void initState() {
     super.initState();
     _loadData();
 
-    _audioPlayer.onPlayerComplete.listen((event) {
+    // ⬅️ الاستماع لانتهاء الصوت من الخدمة لإخفاء الـ Visualizer
+    _audioService.onPlayerComplete.listen((event) {
       if (mounted) {
         setState(() {
           _playingIndex = null;
@@ -63,12 +67,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
     });
 
-    Timer.periodic(const Duration(seconds: 1), (timer) {
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) {
         _updateTime();
         _checkAndPlayAudio();
       }
     });
+  }
+
+  // ⬅️ تفريغ الذاكرة (Best Practice)
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _audioService.dispose();
+    super.dispose();
   }
 
   Future<void> _saveData() async {
@@ -98,7 +110,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     for (int i = 0; i < _schedules.length; i++) {
       var activity = _schedules[i];
       if (activity.time == nowFormatted && !activity.hasPlayed && activity.filePath != null) {
-        _playMusic(activity.filePath!, i);
+        _playMusicWithFade(activity.filePath!, i);
         activity.hasPlayed = true;
       } else if (activity.time != nowFormatted) {
         activity.hasPlayed = false;
@@ -106,21 +118,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  Future<void> _playMusic(String path, int index) async {
+  Future<void> _playMusicWithFade(String path, int index) async {
     try {
-      await _audioPlayer.play(DeviceFileSource(path));
       if (mounted) {
         setState(() {
           _playingIndex = index;
         });
       }
+      
+      // ⬅️ استدعاء دالة التشغيل التي تتكفل بالـ Fade-In و خفض صوت الويندوز
+      await _audioService.playWithFade(path);
+      
     } catch (e) {
       debugPrint("Error playing audio: $e");
     }
   }
 
-  void _stopUrgent() async {
-    await _audioPlayer.stop();
+  Future<void> _stopUrgent() async {
+    // ⬅️ استدعاء دالة الإيقاف التي تتكفل بالـ Fade-Out و إرجاع صوت الويندوز
+    await _audioService.stopWithFade();
+
     if (mounted) {
       setState(() {
         _playingIndex = null;
@@ -226,7 +243,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       body: Column(
         children: [
-          // ⬅️ الهيكل المدمج والمنظف لساعة الـ Dashboard والـ Visualizer
           SizedBox(
             height: 160,
             child: Row(

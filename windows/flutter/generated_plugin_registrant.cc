@@ -7,8 +7,11 @@
 #include "generated_plugin_registrant.h"
 
 #include <audioplayers_windows/audioplayers_windows_plugin.h>
+#include <win32audio/win32audio_plugin_c_api.h>
 
 void RegisterPlugins(flutter::PluginRegistry* registry) {
   AudioplayersWindowsPluginRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("AudioplayersWindowsPlugin"));
+  Win32audioPluginCApiRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("Win32audioPluginCApi"));
 }
